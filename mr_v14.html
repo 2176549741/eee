@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MR 全景控制台 V14 完全体</title>
+    <!-- 引入核心样式与脚本库 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { darkBg: '#0f1115', panelBg: '#181b21', primary: '#3b82f6', accent: '#8b5cf6', danger: '#ef4444', english: '#f59e0b' } } }
+        }
+    </script>
+    <style>
+        body { background-color: #0f1115; color: #e5e7eb; font-family: -apple-system, sans-serif; overflow: hidden; }
+        .tab-content { display: none; height: 100%; overflow-y: auto; padding-bottom: 2rem;}
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .glass-panel { background: rgba(24, 27, 33, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); }
+        .interactive-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2); transition: all 0.2s; }
+        
+        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; transition: all 0.3s; opacity: 0; pointer-events: none; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(10px); }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 500; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        
+        .flip-card { perspective: 1000px; width: 100%; height: 200px; cursor: pointer; }
+        .flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; }
+        .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.75rem; padding: 1.5rem; display: flex; flex-direction: column; justify-content: center; }
+        .flip-card-front { background: #1f2937; border: 1px solid #374151; }
+        .flip-card-back { background: #374151; transform: rotateY(180deg); border: 1px solid #4b5563; }
+        
+        details > summary { list-style: none; cursor: pointer; }
+        details > summary::-webkit-details-marker { display: none; }
+        
+        .markdown-body h3 { font-size: 1.1rem; font-weight: bold; color: #8b5cf6; margin-top: 1rem; margin-bottom: 0.5rem;}
+        .markdown-body p { margin-bottom: 0.5rem; line-height: 1.6; }
+        .markdown-body strong { color: #3b82f6; }
+        .markdown-body code { background: rgba(255,255,255,0.1); padding: 0.1rem 0.3rem; border-radius: 0.2rem; color: #f472b6; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+
+    <!-- 全局提示框 -->
+    <div id="toast" class="glass-panel px-6 py-3 rounded-full text-sm font-bold flex items-center gap-2 text-white shadow-2xl border-primary/50 border">
+        <i class="fas fa-info-circle text-primary"></i> <span id="toast-msg">系统通知</span>
+    </div>
+
+    <aside class="w-20 md:w-64 glass-panel flex flex-col justify-between border-r border-gray-800 z-10 shrink-0">
+        <div>
+            <div class="p-6 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="showToast('全模块在线：V14 完全体')">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-xl font-bold shadow-lg shadow-primary/20">MR</div>
+                    <div class="hidden md:block">
+                        <h1 class="font-bold text-lg tracking-wider">全景控制台</h1>
+                        <p class="text-xs text-primary mt-1"><i class="fas fa-bolt"></i> V14 完全体</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="p-4 space-y-2 mt-2">
+                <button onclick="switchTab('dashboard')" class="tab-btn w-full flex items-center gap-3 p-3 rounded-lg bg-primary/10 text-primary border-l-2 border-primary md:justify-start justify-center" data-target="dashboard">
+                    <i class="fas fa-satellite-dish"></i><span class="hidden md:inline font-medium">中枢概览</span>
+                </button>
+                <button onclick="switchTab('calendar')" class="tab-btn w-full flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white md:justify-start justify-center" data-target="calendar">
+                    <i class="fas fa-calendar-alt"></i><span class="hidden md:inline font-medium">作战日历</span>
+                </button>
+                <button onclick="switchTab('socrates')" class="tab-btn w-full flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white md:justify-start justify-center" data-target="socrates">
+                    <i class="fas fa-brain"></i><span class="hidden md:inline font-medium">苏格拉底演练场</span>
+                </button>
+                <button onclick="switchTab('analyzer')" class="tab-btn w-full flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white md:justify-start justify-center" data-target="analyzer">
+                    <i class="fas fa-heartbeat"></i><span class="hidden md:inline font-medium">决策干预器</span>
+                </button>
+            </nav>
+        </div>
+        <div class="p-4">
+            <button onclick="document.getElementById('api-modal').classList.add('active')" class="w-full flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white md:justify-start justify-center border border-gray-700">
+                <i class="fas fa-cog"></i><span class="hidden md:inline font-medium text-xs">配置 AI 核心</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 overflow-hidden relative">
+        
+        <!-- ================= 视图 1：概览与稳固区 ================= -->
+        <section id="dashboard" class="tab-content active p-4 md:p-8">
+            <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4 glass-panel p-6 rounded-xl relative overflow-hidden">
+                <div class="z-10 flex-1">
+                    <h2 class="text-2xl font-bold text-white mb-2" id="current-date">--</h2>
+                    <p class="text-sm text-gray-400 italic border-l-2 border-primary pl-3">"世界最不缺的就是天才与努力，别拿妥协当退路。"</p>
+                </div>
+                
+                <!-- 饼状图：完美修复显示 -->
+                <div class="z-10 flex items-center gap-4 bg-gray-900/50 p-3 rounded-xl border border-gray-700/50">
+                    <div class="w-20 h-20 relative">
+                        <canvas id="progressChart"></canvas>
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <span class="text-xs text-gray-400">战术执行率</span>
+                        <span class="text-lg font-bold text-accent" id="chart-percentage">0%</span>
+                    </div>
+                </div>
+
+                <div class="z-10 flex gap-4 shrink-0">
+                    <div class="bg-darkBg p-3 rounded-lg border border-danger/30 flex flex-col items-center min-w-[100px] shadow-lg shadow-danger/10">
+                        <span class="text-xs text-gray-400 mb-1">距 2027 高考</span>
+                        <div class="text-danger"><span class="text-2xl font-black" id="gaokao-countdown">--</span><span class="text-xs ml-1">天</span></div>
+                    </div>
+                </div>
+                <div class="absolute right-0 top-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -z-0 transform translate-x-1/2 -translate-y-1/2"></div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 稳固区：全量大纲注入 -->
+                <div class="glass-panel rounded-xl p-6 flex flex-col h-[60vh]">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2 shrink-0"><i class="fas fa-layer-group text-primary"></i> 稳固区 (全景知识树)</h3>
+                    
+                    <div class="flex-1 overflow-y-auto pr-2 space-y-4 no-scrollbar">
+                        <!-- 数学目录：十套冲刺卷全覆盖 -->
+                        <details class="bg-gray-800/30 rounded-lg border border-blue-900/50 open:border-blue-500/50 transition-colors">
+                            <summary class="p-3 font-bold flex justify-between items-center hover:bg-gray-800 rounded-lg text-blue-400">
+                                <span><i class="fas fa-square-root-variable mr-2"></i>数学：高考冲刺十讲</span>
+                                <i class="fas fa-chevron-down text-xs"></i>
+                            </summary>
+                            <div class="p-3 pl-4 space-y-2 border-t border-gray-700" id="math-tree">
+                                <!-- JS 自动渲染 -->
+                            </div>
+                        </details>
+
+                        <!-- 生物目录 -->
+                        <details class="bg-gray-800/30 rounded-lg border border-green-900/50 open:border-green-500/50 transition-colors">
+                            <summary class="p-3 font-bold flex justify-between items-center hover:bg-gray-800 rounded-lg text-green-400">
+                                <span><i class="fas fa-dna mr-2"></i>生物：新高考全量大纲</span>
+                                <i class="fas fa-chevron-down text-xs"></i>
+                            </summary>
+                            <div class="p-3 pl-4 space-y-2 border-t border-gray-700" id="bio-tree">
+                                <!-- JS 自动渲染 -->
+                            </div>
+                        </details>
+
+                        <!-- 英语目录：补齐 -->
+                        <details class="bg-gray-800/30 rounded-lg border border-yellow-900/50 open:border-yellow-500/50 transition-colors">
+                            <summary class="p-3 font-bold flex justify-between items-center hover:bg-gray-800 rounded-lg text-english">
+                                <span><i class="fas fa-language mr-2"></i>英语：核心突破</span>
+                                <i class="fas fa-chevron-down text-xs"></i>
+                            </summary>
+                            <div class="p-3 pl-4 space-y-2 border-t border-gray-700" id="english-tree">
+                                <!-- JS 自动渲染 -->
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- 今日战术队列 -->
+                <div class="glass-panel rounded-xl p-6 flex flex-col h-[60vh]">
+                    <h3 class="text-lg font-bold mb-4 flex justify-between items-center shrink-0">
+                        <span><i class="fas fa-tasks text-accent"></i> 今日战术队列</span>
+                        <button onclick="document.getElementById('task-modal').classList.add('active')" class="text-sm bg-gray-800 px-3 py-1 rounded hover:bg-gray-700 border border-gray-600"><i class="fas fa-plus"></i></button>
+                    </h3>
+                    <div id="task-list" class="flex-1 overflow-y-auto space-y-2 no-scrollbar pr-2">
+                        <p class="text-xs text-gray-500 text-center mt-20" id="empty-task-tip">队列空置。<br>在左侧知识树中点击章节启动实战，或手动下达指令。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 作战日历 -->
+        <section id="calendar" class="tab-content p-4 md:p-8">
+            <div class="glass-panel rounded-xl p-6 h-[calc(100vh-6rem)] flex flex-col">
+                <h3 class="text-lg font-bold mb-2"><i class="fas fa-calendar-alt text-accent"></i> 艾宾浩斯复习矩阵</h3>
+                <p class="text-xs text-gray-400 mb-4">掌握考点后，系统将按 1, 2, 4, 7, 15 天为你排布复习时间线。</p>
+                <div class="grid grid-cols-7 gap-2 text-center text-sm mb-2 font-bold text-gray-500 shrink-0">
+                    <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-2 flex-1 auto-rows-fr overflow-y-auto no-scrollbar pb-10"></div>
+            </div>
+        </section>
+
+        <!-- 苏格拉底演练场 -->
+        <section id="socrates" class="tab-content p-4 md:p-8">
+            <div class="glass-panel rounded-xl flex flex-col h-[calc(100vh-6rem)] border-t-4 border-accent relative">
+                <div class="p-4 border-b border-gray-800 flex justify-between items-center shrink-0 bg-gray-900/50 rounded-t-xl">
+                    <h3 class="font-bold flex items-center gap-2"><i class="fas fa-brain text-accent"></i> 费曼提问引擎</h3>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-white" title="勾选后，AI将作为普通助手，不会刻意刁难你">
+                            <input type="checkbox" id="socrates-raw" class="accent-accent w-4 h-4 rounded"> 无预设纯净模式
+                        </label>
+                    </div>
+                </div>
+                <div id="socrates-chat" class="flex-1 p-4 overflow-y-auto space-y-4 no-scrollbar pb-20">
+                    <div class="flex items-start gap-3 w-[90%] md:w-4/5">
+                        <div class="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent shrink-0"><i class="fas fa-robot"></i></div>
+                        <div class="bg-gray-800/50 p-3 rounded-lg rounded-tl-none text-sm border border-gray-700 leading-relaxed shadow-lg">
+                            我是你的费曼导师。告诉我你目前正在复习哪一个概念？我会连续反问你，直到排查出你底层逻辑里的每一个漏洞。
+                        </div>
+                    </div>
+                </div>
+                <div class="absolute bottom-0 left-0 w-full p-4 border-t border-gray-800 bg-panelBg rounded-b-xl flex gap-3">
+                    <input type="text" id="socrates-input" placeholder="例如：我刚学完减数分裂，我以为同源染色体就是姐妹染色单体..." class="flex-1 bg-darkBg border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-accent text-sm shadow-inner">
+                    <button onclick="sendSocratesMessage()" class="bg-accent hover:bg-purple-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition-transform active:scale-95"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 决策干预器 -->
+        <section id="analyzer" class="tab-content p-4 md:p-8">
+            <div class="glass-panel rounded-xl flex flex-col h-[calc(100vh-6rem)] border-t-4 border-danger relative">
+                <div class="p-4 border-b border-gray-800 flex justify-between items-center shrink-0 bg-gray-900/50 rounded-t-xl">
+                    <h3 class="font-bold flex items-center gap-2"><i class="fas fa-heartbeat text-danger"></i> ROI 决策干预器</h3>
+                    <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-white">
+                        <input type="checkbox" id="analyzer-raw" class="accent-danger w-4 h-4 rounded"> 纯净闲聊模式
+                    </label>
+                </div>
+                <div id="analyzer-chat" class="flex-1 p-4 overflow-y-auto space-y-4 no-scrollbar pb-20">
+                    <div class="flex items-start gap-3 w-[90%] md:w-4/5">
+                        <div class="w-8 h-8 rounded-full bg-danger/20 flex items-center justify-center text-danger shrink-0"><i class="fas fa-robot"></i></div>
+                        <div class="bg-gray-800/50 p-3 rounded-lg rounded-tl-none text-sm border border-gray-700 leading-relaxed shadow-lg text-gray-200">
+                            系统底层已载入你的【学习地点 ROI 决策矩阵】（含家、市图、区图、咖啡店、自习室、随机）。<br>
+                            输入你现在的纠结、资金状况和可用时间。我会用最冷酷的数据视角帮你斩断内耗。
+                        </div>
+                    </div>
+                </div>
+                <div class="absolute bottom-0 left-0 w-full p-4 border-t border-gray-800 bg-panelBg rounded-b-xl flex gap-3">
+                    <input type="text" id="analyzer-input" placeholder="例如：我今天下午只有3个小时，我不想去区图因为太困了，但咖啡店好贵..." class="flex-1 bg-darkBg border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-danger text-sm shadow-inner">
+                    <button onclick="sendAnalyzerMessage()" class="bg-danger hover:bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition-transform active:scale-95"><i class="fas fa-bolt"></i></button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    
+    <!-- 弹窗：刷题与AI动态引擎 -->
+    <div id="quiz-modal" class="modal">
+        <div class="bg-panelBg border border-gray-700 w-11/12 md:w-3/4 lg:w-2/3 max-w-4xl rounded-xl flex flex-col h-[85vh] shadow-2xl relative overflow-hidden">
+            <!-- Header -->
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900 shrink-0">
+                <h3 class="font-bold text-lg flex items-center gap-2 text-white" id="quiz-title"><i class="fas fa-crosshairs text-primary"></i> 模块特训</h3>
+                <button onclick="closeQuiz()" class="text-gray-400 hover:text-white w-8 h-8 flex items-center justify-center rounded hover:bg-gray-700 transition-colors"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <!-- Body -->
+            <div class="p-6 flex-1 overflow-y-auto no-scrollbar relative bg-[#13151a]" id="quiz-content">
+                <!-- 动态内容渲染于此 -->
+            </div>
+
+            <!-- Loading Mask for AI -->
+            <div id="ai-loading" class="absolute inset-0 bg-[#13151a]/90 backdrop-blur flex flex-col justify-center items-center z-50 hidden">
+                <i class="fas fa-circle-notch fa-spin text-5xl text-primary mb-6"></i>
+                <p class="text-base font-bold text-white tracking-widest animate-pulse">正在连线 AI 核心，针对该考点现场构建变式题...</p>
+                <p class="text-xs text-gray-400 mt-3">（预计需要 5 - 15 秒）</p>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-gray-700 bg-gray-900 flex justify-between items-center shrink-0" id="quiz-footer" style="display:none;">
+                <span class="text-sm font-bold text-gray-400 bg-gray-800 px-3 py-1 rounded" id="quiz-progress">1 / 5</span>
+                <button onclick="nextQuizCard()" class="bg-primary hover:bg-blue-600 text-white px-8 py-2.5 rounded-lg font-bold shadow-lg shadow-blue-900/50 transition-transform active:scale-95">下一题 / 结算</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：通用 API 配置 -->
+    <div id="api-modal" class="modal">
+        <div class="bg-panelBg border border-gray-700 w-11/12 max-w-md rounded-xl p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-blue-900/50 border border-primary flex items-center justify-center text-primary"><i class="fas fa-network-wired"></i></div>
+                <div>
+                    <h3 class="font-bold text-lg text-white">配置通讯链路</h3>
+                    <p class="text-xs text-gray-400">密钥仅储存于本地浏览器</p>
+                </div>
+            </div>
+            
+            <label class="text-xs font-bold text-gray-300 mb-2 block">选择 AI 服务商：</label>
+            <select id="api-provider" class="w-full bg-darkBg border border-gray-600 rounded-lg p-2.5 text-white mb-4 outline-none focus:border-primary text-sm shadow-inner transition-colors" onchange="toggleCustomApiUrl()">
+                <option value="siliconflow">硅基流动 (SiliconFlow) [原生支持网页跨域]</option>
+                <option value="deepseek">DeepSeek 官方平台</option>
+                <option value="glm">智谱 AI (GLM)</option>
+                <option value="custom">自定义节点 (Custom API)</option>
+            </select>
+
+            <div id="custom-api-box" class="hidden mb-4 p-3 bg-gray-900 rounded-lg border border-gray-700">
+                <label class="text-xs text-gray-400 mb-1 block">接口地址 (Base URL):</label>
+                <input type="text" id="api-url-input" placeholder="https://api.example.com/v1/chat/completions" class="w-full bg-darkBg border border-gray-600 rounded p-2 text-white mb-3 text-xs outline-none focus:border-primary">
+                <label class="text-xs text-gray-400 mb-1 block">模型名称 (Model ID):</label>
+                <input type="text" id="api-model-input" placeholder="例如: gpt-4o-mini 或 deepseek-chat" class="w-full bg-darkBg border border-gray-600 rounded p-2 text-white text-xs outline-none focus:border-primary">
+            </div>
+
+            <label class="text-xs font-bold text-gray-300 mb-2 block">API 密钥 (API Key)：</label>
+            <input type="password" id="api-key-input" placeholder="sk-..." class="w-full bg-darkBg border border-gray-600 rounded-lg p-3 text-white mb-6 outline-none focus:border-primary text-sm shadow-inner font-mono tracking-widest">
+            
+            <div class="flex justify-end gap-3">
+                <button onclick="document.getElementById('api-modal').classList.remove('active')" class="px-5 py-2.5 rounded-lg text-gray-400 hover:bg-gray-800 font-medium transition-colors">取消</button>
+                <button onclick="saveApiConfig()" class="bg-primary hover:bg-blue-600 px-5 py-2.5 rounded-lg text-white font-bold shadow-lg shadow-blue-900/30 transition-transform active:scale-95">保存并激活</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：手动添加任务 -->
+    <div id="task-modal" class="modal">
+        <div class="bg-panelBg border border-gray-700 w-11/12 max-w-md rounded-xl p-6 shadow-2xl">
+            <h3 class="font-bold text-lg mb-4 text-white flex items-center gap-2"><i class="fas fa-flag text-accent"></i> 下达独立战术指令</h3>
+            <input type="text" id="custom-task-input" placeholder="输入任务，例如：背诵英语应用文开头..." class="w-full bg-darkBg border border-gray-600 rounded-lg p-3 text-white mb-6 outline-none focus:border-accent text-sm shadow-inner">
+            <div class="flex justify-end gap-3">
+                <button onclick="document.getElementById('task-modal').classList.remove('active')" class="px-5 py-2.5 rounded-lg text-gray-400 hover:bg-gray-800 font-medium transition-colors">取消</button>
+                <button onclick="addCustomTask()" class="bg-accent hover:bg-purple-600 px-5 py-2.5 rounded-lg text-white font-bold shadow-lg shadow-purple-900/30 transition-transform active:scale-95">确认部署</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================= 核心 UI 交互函数 =================
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-primary/10', 'text-primary', 'border-l-2', 'border-primary');
+                el.classList.add('text-gray-400');
+            });
+            
+            const targetContent = document.getElementById(tabId);
+            if (targetContent) targetContent.classList.add('active');
+            
+            const activeBtn = document.querySelector(`.tab-btn[data-target="${tabId}"]`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-gray-400');
+                activeBtn.classList.add('bg-primary/10', 'text-primary', 'border-l-2', 'border-primary');
+            }
+            
+            if (tabId === 'calendar' && typeof renderCalendar === 'function') {
+                renderCalendar();
+            }
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            if(!t) return;
+            document.getElementById('toast-msg').innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function initDates() {
+            const today = new Date();
+            document.getElementById('current-date').innerText = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+            const gaokao = new Date('2027-06-07');
+            const diff = Math.ceil((gaokao - today) / (1000 * 60 * 60 * 24));
+            document.getElementById('gaokao-countdown').innerText = diff > 0 ? diff : 0;
+            
+            const savedKey = localStorage.getItem('mr_api_key');
+            const savedProvider = localStorage.getItem('mr_api_provider');
+            if(savedKey) document.getElementById('api-key-input').value = savedKey;
+            if(savedProvider) document.getElementById('api-provider').value = savedProvider;
+            toggleCustomApiUrl(); 
+        }
+
+        // ================= 数据中心：全量目录树与十套数学卷 =================
+        const TOC_DATA = {
+            bio: [
+                { book: "必修1《分子与细胞》", chapters: ["走近细胞", "组成细胞的分子", "细胞的基本结构", "细胞的物质输入和输出", "细胞的能量供应和利用", "细胞的生命历程"] },
+                { book: "必修2《遗传与进化》", chapters: ["遗传因子的发现", "基因和染色体的关系", "基因的本质", "基因的表达", "基因突变及其他变异", "生物的进化"] },
+                { book: "选择性必修1《稳态与调节》", chapters: ["人体的内环境与稳态", "神经调节", "体液调节", "免疫调节", "植物生命活动的调节"] },
+                { book: "选择性必修2《生物与环境》", chapters: ["种群及其动态", "群落及其演替", "生态系统及其稳定性", "人与环境"] },
+                { book: "选择性必修3《生物技术与工程》", chapters: ["发酵工程", "细胞工程", "基因工程", "生物技术的安全性与伦理问题"] }
+            ],
+            math: [
+                { book: "高考冲刺十讲 (绝密压轴)", chapters: [
+                    "高考冲刺一：复数", 
+                    "高考冲刺二：集合", 
+                    "高考冲刺三：一元二次函数与不等式", 
+                    "高考冲刺四：平面向量", 
+                    "高考冲刺五：数列", 
+                    "高考冲刺六：计数原理", 
+                    "高考冲刺七：三角函数", 
+                    "高考冲刺八：导数", 
+                    "高考冲刺九：圆锥曲线", 
+                    "高考冲刺十：立体几何"
+                ]}
+            ],
+            english: [
+                { book: "高考英语核心突破", chapters: ["核心词汇3500", "长难句语法分析", "阅读理解技巧", "七选五实战", "完形填空精讲", "书面表达(作文)"]}
+            ]
+        };
+
+        // 核心真题库 (饱和注入 10 份数学 + 生物核心)
+        const knowledgeDB = {
+            // ----- 数学 10 大冲刺专题 -----
+            "高考冲刺一：复数": [
+                { type: 'mcq', q: '(2025·新高考) (1+5i)i 的虚部为？', options: ['A. -1', 'B. 0', 'C. 1', 'D. 6'], ans: 2, exp: '(1+5i)i = i + 5i² = -5 + i，因此虚部为 1。' },
+                { type: 'mcq', q: '若 z/(z-1) = 1+i，则 z = ？', options: ['A. -1-i', 'B. 1+i', 'C. 1-i', 'D. 1+i'], ans: 2, exp: '化简得 z/(z-1) = 1 + 1/(z-1) = 1+i，所以 1/(z-1) = i，则 z-1 = 1/i = -i，解得 z = 1-i。' },
+                { type: 'flip', q: '复数的模与共轭复数的关系？', ans: '|z| = |z̅| = √(a² + b²)。且 z · z̅ = |z|²。' }
+            ],
+            "高考冲刺二：集合": [
+                { type: 'mcq', q: '已知集合 M={x|2x-1>5}, N={1,2,3}，则 M∩N = ？', options: ['A. {1,2,3}', 'B. {2,3}', 'C. {3}', 'D. ∅'], ans: 3, exp: 'M的解集为x>3，N中元素最大为3，无交集，故为∅。' },
+                { type: 'mcq', q: '设全集 U={1,2,3,4,5}, A={1,3}, B={2,3,5}，则 Cu(A∪B) = ？', options: ['A. {1,2,3,4}', 'B. {2,3,4}', 'C. {2,4}', 'D. {4}'], ans: 3, exp: 'A∪B = {1,2,3,5}，全集为{1,2,3,4,5}，补集为{4}。' }
+            ],
+            "高考冲刺三：一元二次函数与不等式": [
+                { type: 'mcq', q: '不等式 (x+1)/(x-6) ≤ 0 的解集为？', options: ['A. (2,6]', 'B. [-1,6)', 'C. (2,+∞)', 'D. [-1,2)'], ans: 1, exp: '等价于 (x+1)(x-6) ≤ 0 且 x-6 ≠ 0，解得 -1 ≤ x < 6。' },
+                { type: 'mcq', q: '若 a>0, b>0 且 a+2b=4，则 ab 的最大值是？', options: ['A. 2', 'B. 4', 'C. 8'], ans: 0, exp: '4 = a+2b ≥ 2√(2ab) => 2ab ≤ 4 => ab ≤ 2。' }
+            ],
+            "高考冲刺四：平面向量": [
+                { type: 'mcq', q: '已知 a=(x+2, 1+x), b=(x-2, 1-x), 若 a//b，则 x² = ？', options: ['A. 2', 'B. 3', 'C. 4'], ans: 0, exp: '共线定理交叉相乘：(x+2)(1-x) - (1+x)(x-2) = 0，化简得 -2x² + 4 = 0 => x² = 2。' },
+                { type: 'mcq', q: '已知向量 a=(cosθ, sinθ), b=(3,-4)，则 a·b 的最大值是？', options: ['A. 7', 'B. 5', 'C. 4', 'D. 1'], ans: 1, exp: 'a·b = 3cosθ - 4sinθ = 5cos(θ+φ)，最大值为5。' }
+            ],
+            "高考冲刺五：数列": [
+                { type: 'mcq', q: '等差数列中，S3=6, S5=-5，则 S6 = ？', options: ['A. 20', 'B. -15', 'C. 10', 'D. -5'], ans: 1, exp: 'S3=3a1+3d=6 => a1+d=2。S5=5a1+10d=-5 => a1+2d=-1。解得 a1=5, d=-3。S6 = 30-45 = -15。' },
+                { type: 'mcq', q: '等差数列中，a3+a4=7, 3a2+a5=5，则 S10 = ？', options: ['A. 85', 'B. 95', 'C. 105'], ans: 1, exp: '联立解得 a1=-4, d=3。S10 = 10(-4) + 45(3) = 95。' }
+            ],
+            "高考冲刺六：计数原理": [
+                { type: 'mcq', q: '在 (x - √x)^4 的展开式中，x³ 的系数为？', options: ['A. 4', 'B. 6', 'C. 12', 'D. -6'], ans: 1, exp: '通项 Tr+1 = C(4,r) * x^(4-r) * (-x^(1/2))^r。x的指数为 4 - r/2 = 3 => r=2。系数为 C(4,2)*(-1)² = 6。' },
+                { type: 'mcq', q: '甲乙两人从6种课外读物中各选2种，恰有1种相同的选法共有多少种？', options: ['A. 30', 'B. 60', 'C. 120', 'D. 240'], ans: 2, exp: '选法种数为：C(6,1) * C(5,1) * C(4,1) = 120。即先选1本相同的，剩下5本中甲选1本，剩下4本中乙选1本。' }
+            ],
+            "高考冲刺七：三角函数": [
+                { type: 'mcq', q: 'sin20°cos10° - cos160°sin10° = ？', options: ['A. -√3/2', 'B. √3/2', 'C. -1/2', 'D. 1/2'], ans: 3, exp: 'cos160° = -cos20°。原式 = sin20°cos10° + cos20°sin10° = sin(20°+10°) = sin30° = 1/2。' },
+                { type: 'mcq', q: '若 tan α = 3/4，则 cos²α + 2sin 2α = ？', options: ['A. 64/25', 'B. 48/25', 'C. 16/25'], ans: 0, exp: '原式 = (cos²α+4sinαcosα)/(sin²α+cos²α) = (1+4tanα)/(tan²α+1) = (1+3)/(9/16+1) = 64/25。' }
+            ],
+            "高考冲刺八：导数": [
+                { type: 'mcq', q: '函数 f(x) = e^x - 2x 的最小值为？', options: ['A. 2-2ln2', 'B. e-2', 'C. 0', 'D. 1'], ans: 0, exp: 'f\'(x) = e^x - 2 = 0 => x=ln2。极小值即最小值 f(ln2) = e^(ln2) - 2ln2 = 2 - 2ln2。' },
+                { type: 'mcq', q: '曲线 y=xlnx 在点 (1,0) 处的切线方程为？', options: ['A. x-y-1=0', 'B. x+y-1=0', 'C. 2x-y-2=0'], ans: 0, exp: 'y\' = lnx + 1。在 x=1 处斜率 k=1。切线方程：y-0 = 1(x-1) => x-y-1=0。' }
+            ],
+            "高考冲刺九：圆锥曲线": [
+                { type: 'mcq', q: '已知圆 x²+y²-6x=0，过点 (1,2) 的直线被该圆截得的弦长的最小值为？', options: ['A. 1', 'B. 2', 'C. 3', 'D. 4'], ans: 1, exp: '圆心C(3,0)，半径r=3。点D(1,2)，当直线垂直于CD时弦长最短。CD距离 d = √[(3-1)²+(0-2)²] = 2√2。最小弦长 = 2√(r²-d²) = 2√(9-8) = 2。' },
+                { type: 'mcq', q: '过点 (0,-2) 与圆 x²+y²-4x-1=0 相切的两直线夹角为α，则 sinα = ？', options: ['A. 1', 'B. √15/4', 'C. √10/4', 'D. √6/4'], ans: 1, exp: '圆心(2,0)，r=√5。P(0,-2)到圆心距离PC=2√2。sin(α/2) = r/PC = √5/(2√2)。cos(α/2) = √3/(2√2)。sinα = 2sincos = √15/4。' }
+            ],
+            "高考冲刺十：立体几何": [
+                { type: 'mcq', q: '圆柱和圆锥底面半径相等、侧面积相等、高均为√3，则圆锥体积为？', options: ['A. 2√3π', 'B. 3√3π', 'C. 6√3π', 'D. 9√3π'], ans: 1, exp: '设半径r，母线l=√(r²+3)。侧面积相等：2πr*√3 = πr*√(r²+3) => 12=r²+3 => r=3。圆锥体积 V = 1/3 * π*3² * √3 = 3√3π。' }
+            ],
+
+            // ----- 生物 核心经典 -----
+            "细胞的生命历程": [
+                { type: 'mcq', q: '鉴别一个正在进行有丝分裂的细胞是植物细胞还是动物细胞，最可靠的方法是？', options: ['A. 看是否有中心体', 'B. 看是否出现星射线', 'C. 看末期细胞质分裂方式'], ans: 2, exp: '植物形成细胞板，动物细胞膜向内凹陷。' }
+            ],
+            "减数分裂和受精作用": [
+                { type: 'mcq', q: '精原细胞所有DNA被3H标记，在1H中减数分裂，4个精细胞带放射性的有几个？', options: ['A. 1个', 'B. 2个', 'C. 4个'], ans: 2, exp: '复制一次，每条染色单体均带标记，分开后4个精细胞都有。' }
+            ],
+            "DNA是主要的遗传物质": [
+                { type: 'mcq', q: '格里菲斯的肺炎链球菌实验结论是？', options: ['A. DNA是遗传物质', 'B. 加热杀死的S型细菌中存在转化因子'], ans: 1, exp: '格里菲斯只证明存在转化因子，艾弗里才证明是DNA。' }
+            ],
+            "植物生命活动的调节": [
+                { type: 'mcq', q: '向光性本质原因是？', options: ['A. 向光侧生长素分解', 'B. 尖端生长素横向运输'], ans: 1, exp: '单侧光引起尖端横向运输，背光侧多，生长快。' }
+            ]
+        };
+
+        // ================= 状态管理 =================
+        let completedTasks = parseInt(localStorage.getItem('mr_completed_tasks')) || 0;
+        let totalTasksAdded = parseInt(localStorage.getItem('mr_total_tasks')) || 0;
+        let progressChartInstance = null;
+
+        let currentQuizQueue = [];
+        let currentQuizIndex = 0;
+        let currentChapterNode = '';
+
+        // ================= 饼状图渲染 =================
+        function initChart() {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            let comp = completedTasks;
+            let uncomp = Math.max(totalTasksAdded - completedTasks, 0.1); 
+            
+            progressChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['已攻克', '待执行'],
+                    datasets: [{
+                        data: [comp, uncomp],
+                        backgroundColor: ['#8b5cf6', '#374151'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: { legend: { display: false }, tooltip: { enabled: true } }
+                }
+            });
+            updateChartText();
+        }
+
+        function updateChart() {
+            if(!progressChartInstance) return;
+            let comp = completedTasks;
+            let uncomp = Math.max(totalTasksAdded - completedTasks, 0.1);
+            progressChartInstance.data.datasets[0].data = [comp, uncomp];
+            progressChartInstance.update();
+            updateChartText();
+        }
+
+        function updateChartText() {
+            let total = Math.max(totalTasksAdded, 1);
+            let percent = Math.round((completedTasks / total) * 100);
+            if(totalTasksAdded === 0) percent = 0;
+            document.getElementById('chart-percentage').innerText = `${percent}%`;
+        }
+
+        // ================= 渲染目录树 =================
+        function renderTrees() {
+            const renderSubject = (dataObj, containerId, colorClass, hoverClass) => {
+                const container = document.getElementById(containerId);
+                if(!container) return;
+                container.innerHTML = dataObj.map(book => `
+                    <details class="mb-2">
+                        <summary class="text-sm text-gray-300 py-1 hover:text-white flex items-center gap-2"><i class="fas fa-book-open text-xs text-gray-500"></i>${book.book}</summary>
+                        <div class="pl-6 py-2 space-y-1">
+                            ${book.chapters.map(chap => `<div class="text-xs bg-gray-900/50 p-2 rounded cursor-pointer ${hoverClass} border border-transparent transition-colors text-gray-400" onclick="openNode('${chap}')">${chap}</div>`).join('')}
+                        </div>
+                    </details>
+                `).join('');
+            };
+
+            renderSubject(TOC_DATA.bio, 'bio-tree', 'text-green-400', 'hover:bg-green-600/20 hover:border-green-500/50 hover:text-green-300');
+            renderSubject(TOC_DATA.math, 'math-tree', 'text-blue-400', 'hover:bg-blue-600/20 hover:border-blue-500/50 hover:text-blue-300');
+            renderSubject(TOC_DATA.english, 'english-tree', 'text-english', 'hover:bg-yellow-600/20 hover:border-yellow-500/50 hover:text-yellow-300');
+        }
+
+        // ================= 刷题引擎与AI =================
+        function openNode(chapterName) {
+            currentChapterNode = chapterName;
+            document.getElementById('quiz-title').innerHTML = `<i class="fas fa-crosshairs text-primary"></i> ${chapterName}`;
+            const content = document.getElementById('quiz-content');
+            document.getElementById('quiz-footer').style.display = 'none';
+            document.getElementById('quiz-modal').classList.add('active');
+
+            let htmlStr = '';
+            
+            // 如果本地有硬核题库，先加载本地
+            if(knowledgeDB[chapterName]) {
+                currentQuizQueue = knowledgeDB[chapterName];
+                currentQuizIndex = 0;
+                htmlStr += `
+                    <div class="mb-6 p-4 bg-gray-800/50 border border-gray-700 rounded-xl">
+                        <h4 class="text-sm font-bold text-gray-300 mb-2">已载入该章节的高考核心冲刺真题：</h4>
+                        <button onclick="renderQuizCard()" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm w-full text-left flex justify-between items-center transition-colors">
+                            <span><i class="fas fa-play-circle text-primary mr-2"></i> 开始核心题库测验 (${currentQuizQueue.length} 题)</span>
+                            <i class="fas fa-chevron-right text-gray-500"></i>
+                        </button>
+                    </div>
+                `;
+            } else {
+                htmlStr += `
+                    <div class="mb-6 p-6 bg-gray-800/30 border border-dashed border-gray-700 rounded-xl text-center">
+                        <i class="fas fa-database text-3xl text-gray-600 mb-3"></i>
+                        <p class="text-sm text-gray-400">静态题库未收录此章节。<br>可直接连线 AI 核心进行动态生成。</p>
+                    </div>
+                `;
+            }
+
+            // AI 动态生成入口
+            htmlStr += `
+                <div class="p-6 bg-gradient-to-br from-[#1c162b] to-[#121624] border border-accent/30 rounded-xl shadow-lg relative overflow-hidden group">
+                    <h4 class="text-base font-bold text-white mb-2 relative z-10"><i class="fas fa-bolt text-accent mr-2"></i> 动态特训引擎</h4>
+                    <p class="text-xs text-gray-400 mb-6 relative z-10 leading-relaxed">系统将连接 AI 核心，针对【${chapterName}】为你现场构建 2 道变式题及深度解析。</p>
+                    <button onclick="generateAIQuiz('${chapterName}')" class="w-full bg-accent hover:bg-purple-600 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all relative z-10 flex items-center justify-center gap-2">
+                        <i class="fas fa-magic"></i> 立即召唤 AI 现场演算
+                    </button>
+                    <div id="ai-quiz-result" class="mt-6 hidden markdown-body text-sm text-gray-300 bg-black/30 p-4 rounded border border-gray-700/50"></div>
+                </div>
+            `;
+            content.innerHTML = htmlStr;
+        }
+
+        function closeQuiz() {
+            document.getElementById('quiz-modal').classList.remove('active');
+        }
+
+        function renderQuizCard() {
+            const content = document.getElementById('quiz-content');
+            document.getElementById('quiz-footer').style.display = 'flex';
+            const data = currentQuizQueue[currentQuizIndex];
+            document.getElementById('quiz-progress').innerText = `${currentQuizIndex + 1} / ${currentQuizQueue.length}`;
+
+            if(data.type === 'mcq') {
+                let opts = data.options.map((opt, i) => `
+                    <button onclick="checkMcq(${i}, ${data.ans}, this, '${data.exp}')" class="w-full text-left p-4 rounded-xl bg-gray-800 border border-gray-700 hover:bg-gray-700 transition-colors mb-3 text-sm shadow-sm">${opt}</button>
+                `).join('');
+                content.innerHTML = `
+                    <div class="mb-6"><span class="bg-blue-600 text-xs px-2.5 py-1 rounded mr-2 shadow">选择题</span><span class="font-bold text-base tracking-wide">${data.q}</span></div>
+                    <div>${opts}</div>
+                    <div id="exp-box" class="mt-4 p-4 bg-red-900/20 border border-red-900/50 text-red-200 text-xs rounded-xl hidden leading-relaxed"></div>
+                `;
+            } else if (data.type === 'flip') {
+                content.innerHTML = `
+                    <div class="mb-6"><span class="bg-purple-600 text-xs px-2.5 py-1 rounded mr-2 shadow">硬核闪卡</span><span class="font-bold text-base tracking-wide">${data.q}</span></div>
+                    <div class="flip-card" onclick="this.classList.toggle('flipped')">
+                        <div class="flip-card-inner">
+                            <div class="flip-card-front items-center shadow-lg"><i class="fas fa-hand-pointer text-gray-500 mb-3 text-3xl animate-bounce"></i><span class="text-gray-400 tracking-widest">点击揭晓核心逻辑</span></div>
+                            <div class="flip-card-back items-center text-sm font-bold text-center leading-loose shadow-lg shadow-black/50">${data.ans}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function checkMcq(selected, correct, btn, exp) {
+            if(selected === correct) {
+                btn.classList.remove('bg-gray-800', 'border-gray-700');
+                btn.classList.add('bg-green-600/20', 'border-green-500', 'text-green-300');
+            } else {
+                btn.classList.remove('bg-gray-800', 'border-gray-700');
+                btn.classList.add('bg-red-600/20', 'border-red-500', 'text-red-300');
+                const expBox = document.getElementById('exp-box');
+                expBox.innerHTML = `<strong><i class="fas fa-exclamation-triangle"></i> 陷阱解析：</strong><br><br>${exp}`;
+                expBox.classList.remove('hidden');
+            }
+            btn.parentElement.querySelectorAll('button').forEach(b => b.style.pointerEvents = 'none');
+        }
+
+        function nextQuizCard() {
+            currentQuizIndex++;
+            if(currentQuizIndex < currentQuizQueue.length) {
+                renderQuizCard();
+            } else {
+                finishQuiz();
+            }
+        }
+
+        function finishQuiz() {
+            const content = document.getElementById('quiz-content');
+            document.getElementById('quiz-footer').style.display = 'none';
+            content.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
+                        <i class="fas fa-check text-4xl text-green-400"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-2 tracking-widest">节点封锁完毕</h3>
+                    <p class="text-sm text-gray-400 mb-10">系统已自动将复习指令写入艾宾浩斯底层矩阵。</p>
+                    <button onclick="commitTaskAndSchedule()" class="bg-green-600 hover:bg-green-500 text-white px-10 py-3.5 rounded-lg font-bold shadow-lg shadow-green-900/50 transition-transform active:scale-95 tracking-widest">保存战果退出</button>
+                </div>
+            `;
+        }
+
+        function commitTaskAndSchedule() {
+            const taskList = document.getElementById('task-list');
+            if(document.getElementById('empty-task-tip')) taskList.innerHTML = '';
+            
+            taskList.innerHTML += `
+                <div class="bg-gray-800/50 border-l-4 border-green-500 p-3 rounded-r-lg flex justify-between items-center opacity-70 mb-2">
+                    <span class="line-through text-xs text-gray-400 font-bold tracking-wider">攻克：${currentChapterNode}</span>
+                    <i class="fas fa-check-circle text-green-500"></i>
+                </div>
+            `;
+
+            totalTasksAdded++;
+            completedTasks++;
+            localStorage.setItem('mr_total_tasks', totalTasksAdded);
+            localStorage.setItem('mr_completed_tasks', completedTasks);
+            updateChart();
+
+            const today = new Date();
+            [1, 2, 4, 7, 15].forEach(days => {
+                const targetDate = new Date(today);
+                targetDate.setDate(today.getDate() + days);
+                const dateKey = `${targetDate.getFullYear()}-${targetDate.getMonth()+1}-${targetDate.getDate()}`;
+                if(!window.ebbSchedule) window.ebbSchedule = {};
+                if(!window.ebbSchedule[dateKey]) window.ebbSchedule[dateKey] = [];
+                window.ebbSchedule[dateKey].push(currentChapterNode);
+            });
+
+            closeQuiz();
+            showToast("✅ 战果已保存，复习序列已更新！");
+        }
+
+        // ================= AI 动态出题 =================
+        async function generateAIQuiz(chapter) {
+            const loading = document.getElementById('ai-loading');
+            const resultBox = document.getElementById('ai-quiz-result');
+            
+            loading.classList.remove('hidden');
+            resultBox.classList.add('hidden');
+
+            const sysRole = "你是一个无情、严谨的高考出题机器。请直接且仅输出题目和解析，必须使用 Markdown 格式排版。不要任何开场白或废话。";
+            const prompt = `针对高考知识点【${chapter}】，出2道高难度变式题（1道单选，1道多选或填空）。格式要求：\n### 题目一：[单选题]\n...\n### 题目二：[多选/填空]\n...\n---\n### 深度解析剖析：\n... (指出错选是因为什么思维漏洞)。`;
+
+            const reply = await callGenericAI(prompt, sysRole);
+            
+            loading.classList.add('hidden');
+            resultBox.classList.remove('hidden');
+            resultBox.innerHTML = marked.parse(reply) + `
+                <div class="mt-8 border-t border-gray-700/50 pt-4 flex justify-end">
+                    <button onclick="commitTaskAndSchedule()" class="text-xs bg-primary/20 hover:bg-primary/40 text-primary px-4 py-2 rounded font-bold transition-colors">标记为已练过，归档</button>
+                </div>
+            `;
+        }
+
+        // ================= API 通讯底层 =================
+        function toggleCustomApiUrl() {
+            const provider = document.getElementById('api-provider').value;
+            const customBox = document.getElementById('custom-api-box');
+            if(provider === 'custom') {
+                customBox.classList.remove('hidden');
+            } else {
+                customBox.classList.add('hidden');
+            }
+        }
+
+        function saveApiConfig() {
+            const provider = document.getElementById('api-provider').value;
+            const key = document.getElementById('api-key-input').value.trim();
+            
+            if(provider === 'custom') {
+                const url = document.getElementById('api-url-input').value.trim();
+                const model = document.getElementById('api-model-input').value.trim();
+                if(!url || !model) { alert("自定义模式下，地址和模型名称不能为空！"); return; }
+                localStorage.setItem('mr_api_url', url);
+                localStorage.setItem('mr_api_model', model);
+            }
+
+            if(!key) { alert("请输入 API 密钥！"); return; }
+            
+            localStorage.setItem('mr_api_provider', provider);
+            localStorage.setItem('mr_api_key', key);
+            document.getElementById('api-modal').classList.remove('active');
+            showToast("🔑 AI 核心链路已连接！");
+        }
+
+        async function callGenericAI(prompt, systemRole) {
+            const provider = localStorage.getItem('mr_api_provider') || 'siliconflow';
+            const key = localStorage.getItem('mr_api_key');
+            
+            if(!key) {
+                document.getElementById('api-modal').classList.add('active');
+                return "【链路中断】缺失 API 鉴权密钥。";
+            }
+
+            let url = '';
+            let model = '';
+
+            if (provider === 'siliconflow') {
+                url = 'https://api.siliconflow.cn/v1/chat/completions';
+                model = 'deepseek-ai/DeepSeek-V3';
+            } else if (provider === 'deepseek') {
+                url = 'https://api.deepseek.com/v1/chat/completions';
+                model = 'deepseek-chat';
+            } else if (provider === 'glm') {
+                url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+                model = 'glm-4-flash';
+            } else if (provider === 'custom') {
+                url = localStorage.getItem('mr_api_url');
+                model = localStorage.getItem('mr_api_model');
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: "system", content: systemRole },
+                            { role: "user", content: prompt }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+
+                if(!response.ok) {
+                    const errJson = await response.json().catch(() => ({}));
+                    throw new Error(`[${response.status}] ${errJson.message || response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (e) {
+                return `【演算失败】异常断开：${e.message}。请核实服务商线路或账户余额。`;
+            }
+        }
+
+        // ================= 对话模块 =================
+        async function sendSocratesMessage() {
+            const input = document.getElementById('socrates-input');
+            const topic = document.getElementById('socrates-topic')?.value || '';
+            const text = input.value.trim();
+            const isRaw = document.getElementById('socrates-raw').checked;
+            
+            if(!text) return;
+            appendChat('socrates-chat', 'user', text);
+            input.value = '';
+            
+            const prompt = topic && !isRaw ? `【考点：${topic}】学生的表述是：${text}` : text;
+            const sysRole = isRaw ? "你是一个有用的AI助手，请直接回答用户的问题。" : "你是费曼导师。不要啰嗦，不要长篇大论。通过一个一针见血的反问找出逻辑漏洞，引导其深入理解概念，语气严厉、直接。";
+            
+            const reply = await callGenericAI(prompt, sysRole);
+            appendChat('socrates-chat', 'ai', reply, 'text-accent', isRaw);
+        }
+
+        async function sendAnalyzerMessage() {
+            const input = document.getElementById('analyzer-input');
+            const text = input.value.trim();
+            const isRaw = document.getElementById('analyzer-raw').checked;
+            
+            if(!text) return;
+            appendChat('analyzer-chat', 'user', text);
+            input.value = '';
+            
+            const sysRole = isRaw ? "你是一个友善倾听的AI朋友，请正常回应用户。" : 
+                "你是一个极度理性的高考备考决策机器。用户是高三复读生。面对其纠结，用ROI(投入产出比)和时间成本视角骂醒他。拒绝客套与大段废话，分点直击本质。\n" +
+                "【重要背景数据-学习地点ROI矩阵】：\n" +
+                "1.家：沉浸感极差，极易荒废，除非万不得已不要选。\n" +
+                "2.市图书馆：环境顶级，但单程通勤高达1-2小时，沉没成本太高，除非全天泡馆否则血亏。\n" +
+                "3.区图书馆：通勤小于1小时，性价比较高，但易犯困，需注意精神状态。\n" +
+                "4.咖啡店(区图旁)：沉浸感极强，但有几十块金钱成本，适合急需突破难题的短时冲刺。\n" +
+                "5.自习室：有金钱成本，适合长周期专注。\n" +
+                "6.随机：打破常规的备选项，看心情调节。\n" +
+                "请根据以上数据和用户输入的状态直接作出铁腕裁决！";
+            
+            const reply = await callGenericAI(text, sysRole);
+            appendChat('analyzer-chat', 'ai', reply, 'text-danger', isRaw);
+        }
+
+        function appendChat(containerId, role, text, colorClass = 'text-primary', parseMarkdown = false) {
+            const box = document.getElementById(containerId);
+            const contentHTML = parseMarkdown ? marked.parse(text) : `<div class="text-sm">${text.replace(/\n/g, '<br>')}</div>`;
+
+            if(role === 'user') {
+                box.innerHTML += `
+                    <div class="flex items-start justify-end gap-3 w-[90%] md:w-4/5 ml-auto">
+                        <div class="bg-gray-700 text-white p-3 rounded-lg rounded-tr-none text-sm shadow-md">${contentHTML}</div>
+                        <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-white shrink-0 shadow-lg"><i class="fas fa-user"></i></div>
+                    </div>
+                `;
+            } else {
+                box.innerHTML += `
+                    <div class="flex items-start gap-3 w-[95%] md:w-5/6">
+                        <div class="w-8 h-8 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center ${colorClass} shrink-0 shadow-lg"><i class="fas fa-robot"></i></div>
+                        <div class="bg-gray-800/50 p-3 rounded-lg rounded-tl-none border border-gray-700 text-gray-200 shadow-md ${parseMarkdown ? 'markdown-body text-sm' : ''}">${contentHTML}</div>
+                    </div>
+                `;
+            }
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function addCustomTask() {
+            const input = document.getElementById('custom-task-input');
+            const val = input.value.trim();
+            if(!val) return;
+            const taskList = document.getElementById('task-list');
+            if(document.getElementById('empty-task-tip')) taskList.innerHTML = '';
+            
+            taskList.innerHTML += `
+                <div class="bg-gray-800 border-l-4 border-accent p-3 rounded-r-lg flex justify-between items-start interactive-hover cursor-pointer mb-2" onclick="toggleTaskFinish(this)">
+                    <span class="text-sm font-bold text-gray-200 tracking-wide">${val}</span>
+                    <i class="fas fa-check text-green-500 hidden mt-1"></i>
+                </div>
+            `;
+            
+            totalTasksAdded++;
+            localStorage.setItem('mr_total_tasks', totalTasksAdded);
+            updateChart();
+            
+            input.value = '';
+            document.getElementById('task-modal').classList.remove('active');
+            showToast("🎯 指令已下达至队列");
+        }
+
+        function toggleTaskFinish(element) {
+            if(element.classList.contains('opacity-50')) return; 
+            element.classList.add('opacity-50', 'bg-gray-800/50');
+            element.querySelector('i').classList.remove('hidden');
+            element.querySelector('span').classList.add('line-through', 'text-gray-400');
+            
+            completedTasks++;
+            localStorage.setItem('mr_completed_tasks', completedTasks);
+            updateChart();
+            showToast("✅ 指令归档完毕");
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+            const today = new Date();
+            for(let i=0; i<28; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                const dateKey = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+                const isToday = i === 0;
+                
+                let eventsHtml = '';
+                if(window.ebbSchedule && window.ebbSchedule[dateKey]) {
+                    eventsHtml = `<div class="mt-2 w-2 h-2 rounded-full bg-accent mx-auto shadow-[0_0_8px_rgba(139,92,246,0.8)] animate-pulse"></div>`;
+                }
+                
+                grid.innerHTML += `
+                    <div class="bg-gray-800/30 border border-gray-700/50 rounded-lg p-2 h-16 flex flex-col items-center justify-start ${isToday ? 'border-primary bg-primary/10 shadow-inner' : ''}">
+                        <span class="text-xs ${isToday ? 'text-primary font-bold' : 'text-gray-400'}">${d.getDate()}</span>
+                        ${eventsHtml}
+                    </div>
+                `;
+            }
+        }
+
+        // ================= 启动程序 =================
+        window.onload = function() {
+            initDates();
+            renderTrees();
+            initChart();
+        };
+    </script>
+</body>
+</html>
